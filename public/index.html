@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Procesador de Comprobantes SRI</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="https://cdn.tailwindcss.com">
+    // Activar exportación al mostrar datos
+    document.getElementById("exportButtons").classList.remove("hidden");
+
+    // Descargar Excel
+    document.getElementById("btnExcel").addEventListener("click", () => {
+      window.open("/api/export/excel", "_blank");
+    });
+
+    // Descargar PDF
+    document.getElementById("btnPDF").addEventListener("click", () => {
+      window.open("/api/export/pdf", "_blank");
+    });
+
+</script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js">
+    // Activar exportación al mostrar datos
+    document.getElementById("exportButtons").classList.remove("hidden");
+
+    // Descargar Excel
+    document.getElementById("btnExcel").addEventListener("click", () => {
+      window.open("/api/export/excel", "_blank");
+    });
+
+    // Descargar PDF
+    document.getElementById("btnPDF").addEventListener("click", () => {
+      window.open("/api/export/pdf", "_blank");
+    });
+
+</script>
+</head>
+<body class="bg-gray-50 text-gray-900 font-sans p-4">
+  <div class="max-w-6xl mx-auto">
+    <header class="mb-8 text-center">
+      <h1 class="text-3xl font-bold text-blue-700">Procesador de Comprobantes SRI Ecuador</h1>
+      <p class="text-gray-600 text-sm mt-2">Carga, visualiza y analiza comprobantes electrónicos (XML, CSV, TXT)</p>
+    </header>
+
+    <!-- Upload form -->
+    <form id="uploadForm" class="bg-white p-6 rounded shadow mb-6" enctype="multipart/form-data">
+      <label for="files" class="block font-semibold mb-2">Selecciona archivos:</label>
+      <input type="file" id="files" name="files" multiple accept=".xml,.csv,.txt" class="w-full mb-4 border p-2 rounded" required>
+      <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">Subir y Procesar</button>
+    </form>
+
+    <div id="resultMessage" class="mb-6"></div>
+    <!-- Export buttons -->
+    <div class="mb-6 hidden" id="exportButtons">
+      <button id="btnExcel" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 mr-2">
+        Exportar a Excel
+      </button>
+      <button id="btnPDF" class="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700">
+        Exportar a PDF
+      </button>
+    </div>
+
+
+    <!-- Table -->
+    <div class="overflow-x-auto bg-white p-4 rounded shadow mb-6 hidden" id="tableWrapper">
+      <table class="min-w-full text-sm text-left" id="resultTable">
+        <thead class="bg-gray-100 font-bold">
+          <tr>
+            <th class="px-4 py-2">Tipo</th>
+            <th class="px-4 py-2">Número</th>
+            <th class="px-4 py-2">Fecha</th>
+            <th class="px-4 py-2">RUC Emisor</th>
+            <th class="px-4 py-2">Razón Emisor</th>
+            <th class="px-4 py-2">RUC Receptor</th>
+            <th class="px-4 py-2">Razón Receptor</th>
+            <th class="px-4 py-2">Subtotal</th>
+            <th class="px-4 py-2">IVA</th>
+            <th class="px-4 py-2">Total</th>
+          </tr>
+        </thead>
+        <tbody id="tableBody"></tbody>
+      </table>
+    </div>
+
+    <!-- Chart -->
+    <div class="bg-white p-6 rounded shadow hidden" id="chartWrapper">
+      <h2 class="text-lg font-semibold mb-4">Totales por Tipo de Comprobante</h2>
+      <canvas id="chartCanvas" height="120"></canvas>
+    </div>
+  </div>
+
+  <script>
+    const form = document.getElementById("uploadForm");
+    const resultMessage = document.getElementById("resultMessage");
+    const tableWrapper = document.getElementById("tableWrapper");
+    const tableBody = document.getElementById("tableBody");
+    const chartWrapper = document.getElementById("chartWrapper");
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const files = document.getElementById("files").files;
+      const formData = new FormData();
+      for (const file of files) formData.append("files", file);
+
+      resultMessage.innerHTML = "";
+      const res = await fetch("/api/upload", { method: "POST", body: formData });
+
+      if (!res.ok) {
+        const err = await res.text();
+        resultMessage.innerHTML = `<p class="text-red-600 font-medium">Error: ${err}</p>`;
+        return;
+      }
+
+      const data = await res.json();
+      if (!data.length) {
+        resultMessage.innerHTML = `<p class="text-yellow-600 font-medium">No se procesaron comprobantes.</p>`;
+        return;
+      }
+
+      resultMessage.innerHTML = `<p class="text-green-700 font-medium">Se procesaron ${data.length} comprobantes.</p>`;
+      tableWrapper.classList.remove("hidden");
+      chartWrapper.classList.remove("hidden");
+
+      tableBody.innerHTML = "";
+      const resumen = {};
+
+      data.forEach(item => {
+        const row = `<tr class="border-t">
+          <td class="px-4 py-2">${item.tipo_comprobante || ''}</td>
+          <td class="px-4 py-2">${item.numero_comprobante || ''}</td>
+          <td class="px-4 py-2">${item.fecha_emision || ''}</td>
+          <td class="px-4 py-2">${item.ruc_emisor || ''}</td>
+          <td class="px-4 py-2">${item.razon_social_emisor || ''}</td>
+          <td class="px-4 py-2">${item.ruc_receptor || ''}</td>
+          <td class="px-4 py-2">${item.razon_social_receptor || ''}</td>
+          <td class="px-4 py-2">${item.subtotal || 0}</td>
+          <td class="px-4 py-2">${item.iva || 0}</td>
+          <td class="px-4 py-2">${item.total || 0}</td>
+        </tr>`;
+        tableBody.innerHTML += row;
+
+        const tipo = item.tipo_comprobante || "Otro";
+        resumen[tipo] = (resumen[tipo] || 0) + (item.total || 0);
+      });
+
+      // Gráfico
+      const ctx = document.getElementById("chartCanvas").getContext("2d");
+      new Chart(ctx, {
+        type: "bar",
+        data: {
+          labels: Object.keys(resumen),
+          datasets: [{
+            label: "Total USD",
+            data: Object.values(resumen),
+            backgroundColor: "rgba(59, 130, 246, 0.6)"
+          }]
+        },
+        options: {
+          plugins: { legend: { display: false } },
+          responsive: true
+        }
+      });
+    });
+  
+    // Activar exportación al mostrar datos
+    document.getElementById("exportButtons").classList.remove("hidden");
+
+    // Descargar Excel
+    document.getElementById("btnExcel").addEventListener("click", () => {
+      window.open("/api/export/excel", "_blank");
+    });
+
+    // Descargar PDF
+    document.getElementById("btnPDF").addEventListener("click", () => {
+      window.open("/api/export/pdf", "_blank");
+    });
+
+</script>
+</body>
+</html>
